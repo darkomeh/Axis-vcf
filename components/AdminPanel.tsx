@@ -8,19 +8,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 const RefreshIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>);
 const DownloadIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>);
 const TrashIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>);
-const SettingsIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>);
 
 export const AdminPanel: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [users, setUsers] = useState<User[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(StorageService.getSettings());
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [groups, setGroups] = useState<GroupLink[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'groups' | 'contacts'>('dashboard');
   const [targetInput, setTargetInput] = useState<string>('');
+  const [isCloud, setIsCloud] = useState(false);
 
   useEffect(() => {
+    setIsCloud(StorageService.isCloudEnabled());
     if (isAuthenticated) {
       refreshData();
       const interval = setInterval(refreshData, 5000);
@@ -28,12 +29,17 @@ export const AdminPanel: React.FC = () => {
     }
   }, [isAuthenticated]);
 
-  useEffect(() => { setTargetInput(String(settings.targetCount)); }, [settings.targetCount]);
+  useEffect(() => { 
+      if (settings) setTargetInput(String(settings.targetCount)); 
+  }, [settings?.targetCount]);
 
-  const refreshData = () => {
-    setUsers(StorageService.getUsers());
-    setSettings(StorageService.getSettings());
-    setGroups(StorageService.getGroups());
+  const refreshData = async () => {
+    const u = await StorageService.getUsers();
+    setUsers(u);
+    const s = await StorageService.getSettings();
+    setSettings(s);
+    const g = await StorageService.getGroups();
+    setGroups(g);
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -52,19 +58,28 @@ export const AdminPanel: React.FC = () => {
     VcfService.downloadBlob(content, `Λ𝗫𝗜𝗦_VCF_COMPLETE_EXPORT.vcf`);
   };
 
-  const updateTargetCount = () => {
+  const updateTargetCount = async () => {
       const val = parseInt(targetInput);
-      if (!isNaN(val)) { StorageService.updateSettings({ targetCount: val }); refreshData(); }
+      if (!isNaN(val)) { await StorageService.updateSettings({ targetCount: val }); refreshData(); }
   };
 
-  const handleGroupUpdate = (id: string, field: keyof GroupLink, value: any) => {
+  const handleGroupUpdate = async (id: string, field: keyof GroupLink, value: any) => {
     const updated = groups.map(g => {
         if (g.id === id) return { ...g, [field]: value };
         if (field === 'isActive' && value === true) return { ...g, isActive: false };
         return g;
     });
-    StorageService.updateGroups(updated);
-    setGroups(updated);
+    setGroups(updated); // Optimistic UI
+    await StorageService.updateGroups(updated);
+  };
+
+  const handleReset = async () => {
+      const confirm = window.confirm("⚠️ DANGER: SYSTEM PURGE \n\nThis will PERMANENTLY DELETE all collected numbers and reset the campaign statistics.\n\nAre you sure you want to initialize a new VCF drop?");
+      if (confirm) {
+          await StorageService.resetCampaign();
+          refreshData();
+          alert("System Purged. Protocol Reset Complete.");
+      }
   };
 
   if (!isAuthenticated) {
@@ -82,6 +97,8 @@ export const AdminPanel: React.FC = () => {
     );
   }
 
+  if (!settings) return <div className="p-10 text-center">LOADING DATA STREAM...</div>;
+
   const regularUsers = users.filter(u => !u.isOverflow);
   const overflowUsers = users.filter(u => u.isOverflow);
   const batches: User[][] = [];
@@ -92,7 +109,10 @@ export const AdminPanel: React.FC = () => {
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 pb-6 border-b border-white/10 gap-6">
         <div>
             <h1 className="text-3xl font-black text-white font-mono tracking-tighter">Λ𝗫𝗜𝗦 COMMAND CENTER</h1>
-            <p className="text-[10px] text-axis-neon font-mono tracking-widest mt-1 uppercase">Administrator Session: [ONLINE]</p>
+            <div className="flex items-center gap-2 mt-1">
+                <p className="text-[10px] text-axis-neon font-mono tracking-widest uppercase">Administrator Session: [ONLINE]</p>
+                {!isCloud && <span className="text-[9px] bg-red-900/50 text-red-200 px-2 py-0.5 rounded border border-red-500/30">OFFLINE MODE (NO SYNC)</span>}
+            </div>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
             <button onClick={() => setActiveTab('dashboard')} className={`flex-1 px-5 py-2.5 rounded-xl text-xs font-bold tracking-widest uppercase transition-all border ${activeTab === 'dashboard' ? 'bg-axis-neon text-black border-axis-neon' : 'bg-white/5 border-white/10 text-gray-500'}`}>Stats</button>
@@ -101,6 +121,13 @@ export const AdminPanel: React.FC = () => {
             <button onClick={() => setIsAuthenticated(false)} className="px-5 py-2.5 text-red-500 text-xs font-bold border border-red-500/20 rounded-xl hover:bg-red-500/10">Exit</button>
         </div>
       </header>
+      
+      {!isCloud && (
+          <div className="mb-8 p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-xl text-center">
+              <h3 className="text-yellow-500 font-bold text-xs uppercase tracking-widest mb-1">Database Not Connected</h3>
+              <p className="text-gray-400 text-[10px] font-mono">Data is only saved on this device. To sync with other users, configure <code>SUPABASE_CONFIG</code> in <code>types.ts</code>.</p>
+          </div>
+      )}
 
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
@@ -124,7 +151,7 @@ export const AdminPanel: React.FC = () => {
                                 <button onClick={updateTargetCount} className="px-3 py-1 bg-axis-neon/10 text-axis-neon text-[10px] font-bold rounded-lg border border-axis-neon/20 uppercase">Update</button>
                             </div>
                         </div>
-                        <button onClick={() => StorageService.updateSettings({ isSystemLocked: !settings.isSystemLocked })} className={`flex-1 p-4 rounded-2xl font-black tracking-widest uppercase text-xs transition-all ${settings.isSystemLocked ? 'bg-red-500/10 text-red-500 border border-red-500/30' : 'bg-green-500/10 text-green-500 border border-green-500/30'}`}>
+                        <button onClick={async () => { await StorageService.updateSettings({ isSystemLocked: !settings.isSystemLocked }); refreshData(); }} className={`flex-1 p-4 rounded-2xl font-black tracking-widest uppercase text-xs transition-all ${settings.isSystemLocked ? 'bg-red-500/10 text-red-500 border border-red-500/30' : 'bg-green-500/10 text-green-500 border border-green-500/30'}`}>
                             {settings.isSystemLocked ? 'Unlock Entry' : 'Lock Entry'}
                         </button>
                     </div>
@@ -147,6 +174,11 @@ export const AdminPanel: React.FC = () => {
                             <span className="text-[9px] text-gray-600 mt-1 uppercase">({batch.length} nodes)</span>
                         </button>
                     ))}
+                    {users.length === 0 && (
+                        <div className="col-span-full py-12 text-center">
+                            <p className="text-[10px] font-mono text-gray-700 uppercase tracking-widest">Database Clean. Awaiting Input.</p>
+                        </div>
+                    )}
                     {overflowUsers.length > 0 && (
                         <button onClick={() => { const content = VcfService.generateFileContent(overflowUsers); VcfService.downloadBlob(content, `Λ𝗫𝗜𝗦_VCF_OVERFLOW.vcf`); }} className="flex flex-col items-center justify-center p-6 border border-red-500/20 rounded-2xl bg-red-900/5 hover:bg-red-900/20 transition-all group">
                             <div className="text-red-400 mb-3 group-hover:scale-125 transition-transform"><DownloadIcon /></div>
@@ -154,6 +186,19 @@ export const AdminPanel: React.FC = () => {
                             <span className="text-[9px] text-gray-600 mt-1 uppercase">({overflowUsers.length} nodes)</span>
                         </button>
                     )}
+                </div>
+            </div>
+
+            {/* DANGER ZONE */}
+            <div className="border border-red-500/10 rounded-3xl p-8 bg-red-900/5 mt-8">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div>
+                        <h3 className="text-red-500 text-xs font-mono uppercase tracking-[0.3em] mb-2 flex items-center gap-2"><TrashIcon /> Protocol Reset</h3>
+                        <p className="text-[10px] text-gray-500 font-mono">Irreversible action. Clears all collected node data to start a fresh VCF cycle.</p>
+                    </div>
+                    <button onClick={handleReset} className="px-8 py-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 font-black text-[10px] tracking-widest uppercase hover:bg-red-500/20 transition-all shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                         Reset System (Delete Data)
+                    </button>
                 </div>
             </div>
         </div>

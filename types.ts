@@ -28,3 +28,15 @@ export const CONSTANTS = {
   COUNTDOWN_DURATION_MS: 12 * 60 * 60 * 1000, // 12 hours
   DEFAULT_GROUP_URL: 'https://chat.whatsapp.com/GtVgGTFN8t52sAHaR4XAwq?mode=gi_c',
 };
+
+// --------------------------------------------------------
+// ⚠️ CLOUD DATABASE CONFIGURATION (REQUIRED FOR SYNC)
+// --------------------------------------------------------
+// 1. Go to https://supabase.com and create a free project.
+// 2. Paste your URL and ANON KEY below.
+// 3. Run the SQL script provided in the documentation.
+// --------------------------------------------------------
+export const SUPABASE_CONFIG = {
+  URL: 'https://nwcbsnfmrfpwhoschqlh.supabase.co',
+  KEY: 'sb_publishable_Lpp3QMmEsRNKUI9nOsjIYg_RXsYOweG'
+};

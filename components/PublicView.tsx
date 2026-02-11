@@ -36,38 +36,51 @@ export const PublicView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-  const [settings, setSettings] = useState<AppSettings>(() => StorageService.getSettings());
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [activeGroup, setActiveGroup] = useState<GroupLink | undefined>(undefined);
   const [countdown, setCountdown] = useState<string>('');
 
-  useEffect(() => {
-    setActiveGroup(StorageService.getActiveGroup());
-    const interval = setInterval(() => {
-      StorageService.checkCountdownStatus();
-      const freshSettings = StorageService.getSettings();
-      setSettings(prev => prev.totalCollected !== freshSettings.totalCollected ? freshSettings : prev);
+  const fetchData = async () => {
+      const s = await StorageService.getSettings();
+      setSettings(s);
       
-      if (freshSettings.isCountdownActive && freshSettings.countdownStartTime) {
-        const remaining = Math.max(0, CONSTANTS.COUNTDOWN_DURATION_MS - (Date.now() - freshSettings.countdownStartTime));
+      const g = await StorageService.getActiveGroup();
+      setActiveGroup(g);
+
+      if (s.isCountdownActive && s.countdownStartTime) {
+        StorageService.checkCountdownStatus();
+        const remaining = Math.max(0, CONSTANTS.COUNTDOWN_DURATION_MS - (Date.now() - s.countdownStartTime));
         const hours = Math.floor(remaining / 3600000);
         const minutes = Math.floor((remaining % 3600000) / 60000);
         const seconds = Math.floor((remaining % 60000) / 1000);
         setCountdown(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
       }
-    }, 1000);
+  };
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 2000); // Polling every 2s to catch updates from other users
     return () => clearInterval(interval);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !phone) return;
     setLoading(true);
-    setTimeout(() => {
-      const result = StorageService.addUser(name, phone);
-      setLoading(false);
-      if (result.success) setSubmitted(true);
-      else setError(result.message);
-    }, 1000);
+    
+    try {
+      const result = await StorageService.addUser(name, phone);
+      if (result.success) {
+          setSubmitted(true);
+          fetchData();
+      } else {
+          setError(result.message);
+      }
+    } catch (e) {
+        setError("Connection failed.");
+    } finally {
+        setLoading(false);
+    }
   };
 
   const handleShare = async () => {
@@ -76,13 +89,14 @@ export const PublicView: React.FC = () => {
     else { navigator.clipboard.writeText(window.location.href); alert('Link copied!'); }
   };
 
+  if (!settings) return null;
+
   const currentCount = settings.totalCollected;
   const targetCount = settings.targetCount;
   const progressPercent = Math.min(100, (currentCount / targetCount) * 100);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-100px)] px-4 py-8 relative">
-      {/* Hidden Admin Entry */}
       <button onClick={() => window.location.hash = 'admin'} className="absolute top-4 right-4 z-40 p-2 text-white/5 hover:text-axis-neon transition-all opacity-40 hover:opacity-100">
         <ShieldIcon />
       </button>
